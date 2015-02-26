@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO">
+	<Appenders>
+		<Console name="Console" target="SYSTEM_OUT">
+			<PatternLayout pattern="[%t] %-5level (%F:%L) %c{1}.%M - %msg%n"/>
+		</Console>
+		<RollingFile name="RollingFile" fileName="logs/sql4j.log"
+					filePattern="logs/$${date:yyyy-MM}/sql4j-%d{MM-dd-yyyy}-%i.log.gz">
+			<PatternLayout pattern="%-5level %d{DEFAULT} [%t] %c.%M (%F:%L) - %msg%n" />
+			<Policies>
+        		<TimeBasedTriggeringPolicy />
+        		<SizeBasedTriggeringPolicy size="100 MB"/>
+      		</Policies>
+    	</RollingFile>
+	</Appenders>
+	
+	<Loggers>
+		<Root level="INFO">
+			<AppenderRef ref="Console"/>
+			<AppenderRef ref="RollingFile" />
+		</Root>
+	</Loggers>
+</Configuration>
