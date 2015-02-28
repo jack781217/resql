@@ -33,12 +33,5 @@
 		<type name="Transcript">
 			<field name="gpa" type="double" />
 		</type>
-		<type name="Major" autoId="false">
-			<field name="name" type="string" />
-			<field name="buildings" type="Building" relation="OneToMany" remote="major" />
-		</type>
-		<type name="Building" autoId="false">
-			<field name="name" type="string" />
-		</type>
 	</model>
 </configuration>

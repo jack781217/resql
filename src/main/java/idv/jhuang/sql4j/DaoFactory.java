@@ -2,6 +2,8 @@ package idv.jhuang.sql4j;
 
 import idv.jhuang.sql4j.Configuration.Field;
 import idv.jhuang.sql4j.Configuration.Type;
+import idv.jhuang.sql4j.Configuration.Field.Relation;
+import static idv.jhuang.sql4j.Configuration.Field.Relation.*;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -27,14 +29,53 @@ public class DaoFactory {
 			sql.resetDatabase(config.database.name);
 			
 			for(Type type : config.model.types.values()) {
-				sql.createTable(type.name, type.id.name, sqlDataType(type.id.type, null), true, true);
+				sql.createTable(type.name, type.id.name, sqlDataType(type.id), true, true);
 			}
 			
 			for(Type type : config.model.types.values()) {
-				Field id = type.id;
+				
 				
 				for(Field field : type.fields.values()) {
+					if(!field.master)
+						continue;
 					
+					
+					if(!field.sparse) {
+						String tableName = type.name;
+						
+						if(field.relation == None) {
+							sql.alterTableAdd(tableName, field.name, sqlDataType(field), false);
+						} else {
+							boolean columnUnique = (field.relation == OneToOne);
+							sql.alterTableAdd(tableName, sqlFKName(field), sqlDataType(field.type.id), 
+									field.type.name, field.type.id.name, columnUnique);
+						}
+						
+							
+					} else {
+						String joinTableName = sqlJoinTableName(type, field);
+						String idName = type.id.name;
+						String idType = sqlDataType(type.id);
+						boolean idPK = (field.relation == None 
+								|| field.relation == OneToOne 
+								|| field.relation == ManyToOne);
+						
+						sql.createTable(joinTableName, idName, idType, idPK, false);
+						
+						
+						if(field.relation == None) {
+							sql.alterTableAdd(joinTableName, field.name, sqlDataType(field), false);
+						} else {
+							boolean columnUnique = (field.relation == OneToOne || field.relation == OneToMany);
+							sql.alterTableAdd(joinTableName, sqlFKName(field), sqlDataType(field.type.id), 
+									field.type.name, field.type.id.name, columnUnique);
+						}
+						
+					}
+					
+					
+					
+					/*
 					if(field.master) {
 						switch(field.relation) {
 						case None:
@@ -70,25 +111,25 @@ public class DaoFactory {
 							sql.alterTableAdd(sqlJoinTableName(type, field), sqlFKName(field), sqlDataType(field.type.id.type, null), field.type.name, field.type.id.name, false);
 							break;
 						}
-					}
+					}*/
 				}
 			}
 		}
 	}
 	
-	private String sqlDataType(Type type, List<String> values) {
-		if(type == Type.INT) {
+	private String sqlDataType(Field field) {
+		if(field.type == Type.INT) {
 			return "INTEGER";
-		} else if(type == Type.DOUBLE) {
+		} else if(field.type == Type.DOUBLE) {
 			return "DOUBLE";
-		} else if(type == Type.BOOLEAN) {
+		} else if(field.type == Type.BOOLEAN) {
 			return "BOOLEAN";
-		} else if(type == Type.STRING) {
+		} else if(field.type == Type.STRING) {
 			return "VARCHAR(255)";
-		} else if(type == Type.DATE) {
+		} else if(field.type == Type.DATE) {
 			return "DATE";
-		} else if(type == Type.ENUM) {
-			return String.format("ENUM('%s')", String.join("','", values));
+		} else if(field.type == Type.ENUM) {
+			return String.format("ENUM('%s')", String.join("','", field.values));
 		} else {
 			return "INTEGER";
 		}
