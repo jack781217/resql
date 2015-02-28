@@ -3,6 +3,7 @@ package idv.jhuang.sql4j;
 import static com.google.common.base.Preconditions.checkState;
 
 import java.io.InputStream;
+import java.sql.Driver;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,18 +20,36 @@ import com.thoughtworks.xstream.annotations.XStreamAsAttribute;
 import com.thoughtworks.xstream.annotations.XStreamImplicit;
 
 
-public class Schema {
-	private static final Logger log = LogManager.getLogger(Schema.class);
+public class Configuration {
+	private static final Logger log = LogManager.getLogger(Configuration.class);
 	
-	public static Model parseSchema(InputStream stream) {
+	
+	
+	@SuppressWarnings("unchecked")
+	public static Configuration parseConfiguration(InputStream stream) throws ClassNotFoundException {
 		XStream xstream = new XStream();
 		xstream.processAnnotations(FieldXmlNode.class);
 		xstream.processAnnotations(TypeXmlNode.class);
 		xstream.processAnnotations(ModelXmlNode.class);
+		xstream.processAnnotations(DatabaseXmlNode.class);
+		xstream.processAnnotations(ConfigurationXmlNode.class);
 		
-		ModelXmlNode modelNode = (ModelXmlNode) xstream.fromXML(stream);
+		Configuration configuration = new Configuration();
+		
+		ConfigurationXmlNode configurationNode = (ConfigurationXmlNode) xstream.fromXML(stream);
+		DatabaseXmlNode databaseNode = configurationNode.database;
+		configuration.database = new Database();
+		configuration.database.driver = (Class<Driver>) Class.forName(databaseNode.driver);
+		configuration.database.user = databaseNode.user;
+		configuration.database.password = databaseNode.password;
+		configuration.database.url = databaseNode.url;
+		configuration.database.name = databaseNode.name;
+		
+		//ModelXmlNode modelNode = (ModelXmlNode) xstream.fromXML(stream);
+		ModelXmlNode modelNode = configurationNode.model;
 		Model model = new Model();
 		model.types = new LinkedHashMap<>();
+		configuration.model = model;
 				
 		// first pass: create Models
 		for(TypeXmlNode typeNode : modelNode.types) {
@@ -82,7 +101,7 @@ public class Schema {
 					checkState(fieldNode.relation == null, 
 							"Invalid Field.relation in Model %s: %s. Field.relation must be null if Field.type is one of the data types.",
 							type.name, fieldNode.relation);
-					field.relation = null;
+					field.relation = Field.Relation.None;
 				} else {
 					checkState(Field.Relation.isValid(fieldNode.relation), 
 							"Invalid property 'relation' for %s.%s: %s. Property 'relation' must be one of %s if 'type' is one of the user defined Model.",
@@ -91,7 +110,7 @@ public class Schema {
 				}
 				
 				// remote
-				if(field.relation == null) {
+				if(field.relation == Field.Relation.None) {
 					checkState(fieldNode.remote == null,
 							"Invalid property 'remote' in Field %s.%s: %s. Property 'remote' must be null if 'relation' is null.",
 							type.name, fieldNode.name, fieldNode.remote);
@@ -103,11 +122,23 @@ public class Schema {
 				field.remote = fieldNode.remote;
 					
 				// sparse
-				checkState(fieldNode.sparse == null || fieldNode.sparse.equals("true") || fieldNode.sparse.equals("false"),
+				
+				switch(field.relation) {
+				case None:
+				case OneToOne:
+				case ManyToOne:
+					checkState(fieldNode.sparse == null || fieldNode.sparse.equals("true") || fieldNode.sparse.equals("false"),
 						"Invalid property 'sparse' for %s.%s: %s. Property 'sparse' msut be either null, 'true', or 'false'.",
 						type.name, fieldNode.name, fieldNode.sparse);
-				field.sparse = fieldNode.sparse == null ? 
-						false : Boolean.parseBoolean(fieldNode.sparse);
+					field.sparse = Boolean.parseBoolean(fieldNode.sparse);
+					break;
+				case OneToMany:
+				case ManyToMany:
+					checkState(fieldNode.sparse == null, "Property 'sparse' cannot be specified for OneToMany or ManyToMany relations.");
+					field.sparse = true;
+					break;
+				}
+				
 				
 				// values
 				if(field.type == Type.ENUM) {
@@ -162,13 +193,39 @@ public class Schema {
 		}
 		
 		
-		return model;
+		return configuration;
 	}
 	
+	
+	public Database database;
+	public Model model;
 	
 	//================================================================================
 	//	Java POJO
 	//================================================================================
+	
+	public static class Database {
+		public Class<Driver> driver;
+		public String url;
+		public String user;
+		public String password;
+		public String name;
+		
+		private Database() {
+			
+		}
+		
+		@Override
+		public String toString() {
+			return MoreObjects.toStringHelper(this)
+					.add("driver", driver)
+					.add("url", url)
+					.add("username", user)
+					.add("password", password)
+					.add("name", name)
+					.toString();
+		}
+	}
 	
 	/**
 	 * @category Java POJO
@@ -235,7 +292,7 @@ public class Schema {
 	 */
 	public static class Field {
 		public static enum Relation {
-			OneToOne, OneToMany, ManyToOne, ManyToMany;
+			None, OneToOne, OneToMany, ManyToOne, ManyToMany;
 			public static boolean isValid(String value) {
 				return value != null && (
 						value.equals(OneToOne.toString()) ||
@@ -245,11 +302,9 @@ public class Schema {
 			}
 			public static Relation opposite(Relation relation) {
 				switch(relation) {
-				case OneToOne:	return OneToOne;
-				case ManyToMany: return  ManyToMany;
 				case OneToMany:	return ManyToOne;
 				case ManyToOne:	return OneToMany;
-				default:	return null;
+				default:	return relation;
 				}
 			}
 		}
@@ -288,6 +343,21 @@ public class Schema {
 	//================================================================================
 	//	XML POJO
 	//================================================================================
+	
+	@XStreamAlias("configuration")
+	private static class ConfigurationXmlNode {
+		private DatabaseXmlNode database;
+		private ModelXmlNode model;
+	}
+	
+	@XStreamAlias("database")
+	private static class DatabaseXmlNode {
+		@XStreamAsAttribute public String driver;
+		@XStreamAsAttribute public String url;
+		@XStreamAsAttribute public String user;
+		@XStreamAsAttribute public String password;
+		@XStreamAsAttribute public String name;
+	}
 	
 	/**
 	 * @category XML POJO

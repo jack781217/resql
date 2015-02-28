@@ -2,20 +2,30 @@ package idv.jhuang.sql4j.test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import idv.jhuang.sql4j.Schema;
-import idv.jhuang.sql4j.Schema.Field.Relation;
-import idv.jhuang.sql4j.Schema.Model;
-import idv.jhuang.sql4j.Schema.Type;
+import idv.jhuang.sql4j.Configuration;
+import idv.jhuang.sql4j.Configuration.Field.Relation;
+import idv.jhuang.sql4j.Configuration.Model;
+import idv.jhuang.sql4j.Configuration.Type;
 
 import java.util.Arrays;
 
 import org.junit.Test;
 
-public class SchemaParseTest {
+public class ConfigurationTest {
 
 	@Test
-	public void test() {
-		Model model = Schema.parseSchema(getClass().getClassLoader().getResourceAsStream("sql4j-test.xml"));
+	public void test() throws Exception {
+		Configuration config = Configuration.parseConfiguration(
+				getClass().getClassLoader().getResourceAsStream("sql4j-test.xml"));
+		
+		assertEquals("com.mysql.jdbc.Driver", config.database.driver.getCanonicalName());
+		assertEquals("jdbc:mysql://localhost:3306", config.database.url);
+		assertEquals("root", config.database.user);
+		assertEquals("", config.database.password);
+		assertEquals("sql4j", config.database.name);
+		
+		
+		Model model = config.model;
 		
 		assertTrue(model.types.containsKey("Student"));
 		assertTrue(model.types.containsKey("School"));
