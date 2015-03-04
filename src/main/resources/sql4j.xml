@@ -1,11 +1,12 @@
-<sql4j>
+<configuration>
 	<database driver="com.mysql.jdbc.Driver"
-		url="jdbc:mysql://localhost/giraf"
-		username="root"
-		password="" />
-
-	<schema>
-		<model name="Student">
+		url="jdbc:mysql://localhost:3306"
+		user="root"
+		password="" 
+		name="sql4j" />
+	
+	<model>
+		<type name="Student">
 			<field name="name" type="string" />
 			<field name="age" type="int" />
 			<field name="gender" type="enum" values="male,female" />
@@ -18,26 +19,19 @@
 			<field name="courses" type="Course" relation="ManyToMany" remote="students" />
 			<field name="emails" type="Email" relation="OneToMany" remote="owner" />
 
-			<field name="major" type="Major" relation="ManyToMany" />
-		</model>
-		<model name="School">
+			
+		</type>
+		<type name="School">
 			<field name="name" type="string" />
-		</model>
-		<model name="Course">
+		</type>
+		<type name="Course">
 			<field name="name" type="string" />
-		</model>
-		<model name="Email">
+		</type>
+		<type name="Email">
 			<field name="address" type="string" />
-		</model>
-		<model name="Transcript">
+		</type>
+		<type name="Transcript">
 			<field name="gpa" type="double" />
-		</model>
-		<model name="Major" autoId="false">
-			<field name="name" type="string" />
-			<field name="buildings" type="Building" relation="OneToMany" remote="major" />
-		</model>
-		<model name="Building" autoId="false">
-			<field name="name" type="string" />
-		</model>
-	</schema>
-</sql4j>
+		</type>
+	</model>
+</configuration>

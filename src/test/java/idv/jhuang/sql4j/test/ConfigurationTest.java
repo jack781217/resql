@@ -16,7 +16,7 @@ public class ConfigurationTest {
 	@Test
 	public void test() throws Exception {
 		Configuration config = Configuration.parseConfiguration(
-				getClass().getClassLoader().getResourceAsStream("sql4j-test.xml"));
+				getClass().getClassLoader().getResourceAsStream("sql4j.xml"));
 		
 		assertEquals("com.mysql.jdbc.Driver", config.database.driver.getCanonicalName());
 		assertEquals("jdbc:mysql://localhost:3306", config.database.url);

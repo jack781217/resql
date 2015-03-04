@@ -1,14 +1,21 @@
 package idv.jhuang.sql4j;
 
+import static idv.jhuang.sql4j.Configuration.Field.Relation.ManyToOne;
+import static idv.jhuang.sql4j.Configuration.Field.Relation.None;
+import static idv.jhuang.sql4j.Configuration.Field.Relation.OneToMany;
+import static idv.jhuang.sql4j.Configuration.Field.Relation.OneToOne;
 import idv.jhuang.sql4j.Configuration.Field;
-import idv.jhuang.sql4j.Configuration.Type;
 import idv.jhuang.sql4j.Configuration.Field.Relation;
-import static idv.jhuang.sql4j.Configuration.Field.Relation.*;
+import idv.jhuang.sql4j.Configuration.Type;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -17,29 +24,31 @@ import org.apache.logging.log4j.Logger;
 public class DaoFactory {
 	private static final Logger log = LogManager.getLogger(DaoFactory.class);
 	
-	private Configuration config;
+	public Configuration config;
 	
 	public DaoFactory(Configuration config) {
 		this.config = config;
 	}
 	
 	public void init() throws SQLException {
+		log.info("Connecting to database. URL={}, User={}.", config.database.url, config.database.user);
 		try(Connection conn = DriverManager.getConnection(config.database.url, config.database.user, config.database.password)) {
 			Sql sql = new Sql(conn);
 			sql.resetDatabase(config.database.name);
 			
+			// first round: create all main tables
 			for(Type type : config.model.types.values()) {
 				sql.createTable(type.name, type.id.name, sqlDataType(type.id), true, true);
 			}
 			
+			// second round: create columns and join tables
 			for(Type type : config.model.types.values()) {
-				
-				
 				for(Field field : type.fields.values()) {
+				
 					if(!field.master)
 						continue;
 					
-					
+					// add columns in main table
 					if(!field.sparse) {
 						String tableName = type.name;
 						
@@ -51,16 +60,14 @@ public class DaoFactory {
 									field.type.name, field.type.id.name, columnUnique);
 						}
 						
-							
+					// create join table	
 					} else {
 						String joinTableName = sqlJoinTableName(type, field);
-						String idName = type.id.name;
-						String idType = sqlDataType(type.id);
+						
 						boolean idPK = (field.relation == None 
 								|| field.relation == OneToOne 
 								|| field.relation == ManyToOne);
-						
-						sql.createTable(joinTableName, idName, idType, idPK, false);
+						sql.createTable(joinTableName, type.id.name, sqlDataType(type.id), idPK, false);
 						
 						
 						if(field.relation == None) {
@@ -73,45 +80,6 @@ public class DaoFactory {
 						
 					}
 					
-					
-					
-					/*
-					if(field.master) {
-						switch(field.relation) {
-						case None:
-							if(!field.sparse) {
-								sql.alterTableAdd(type.name, field.name, sqlDataType(field.type, field.values), false);	//TODO implement unique
-							} else {
-								sql.createTable(sqlJoinTableName(type, field), id.name, sqlDataType(id.type, null), true, false);
-								sql.alterTableAdd(sqlJoinTableName(type, field), field.name, sqlDataType(field.type, field.values ), false);	//TODO unique
-							}	
-							break;
-						case OneToOne:
-							if(!field.sparse) {
-								sql.alterTableAdd(type.name, sqlFKName(field), sqlDataType(field.type.id.type, null), field.type.name, field.type.id.name, true);
-							} else {
-								sql.createTable(sqlJoinTableName(type, field), id.name, sqlDataType(id.type, null), true, false);
-								sql.alterTableAdd(type.name, sqlFKName(field), sqlDataType(field.type.id.type, null), field.type.name, field.type.id.name, true);								
-							}
-							break;
-						case ManyToOne:
-							if(!field.sparse) {
-								sql.alterTableAdd(type.name, sqlFKName(field), sqlDataType(field.type.id.type, null), field.type.name, field.type.id.name, false);
-							} else {
-								sql.createTable(sqlJoinTableName(type, field), id.name, sqlDataType(id.type, null), true, false);
-								sql.alterTableAdd(type.name, sqlFKName(field), sqlDataType(field.type.id.type, null), field.type.name, field.type.id.name, false);
-							}
-							break;
-						case OneToMany:
-							sql.createTable(sqlJoinTableName(type, field), id.name, sqlDataType(id.type, null), false, false);
-							sql.alterTableAdd(sqlJoinTableName(type, field), sqlFKName(field), sqlDataType(field.type.id.type, null), field.type.name, field.type.id.name, true);
-							break;
-						case ManyToMany:
-							sql.createTable(sqlJoinTableName(type, field), id.name, sqlDataType(id.type, null), false, false);
-							sql.alterTableAdd(sqlJoinTableName(type, field), sqlFKName(field), sqlDataType(field.type.id.type, null), field.type.name, field.type.id.name, false);
-							break;
-						}
-					}*/
 				}
 			}
 		}
@@ -161,19 +129,61 @@ public class DaoFactory {
 		}
 		
 		private Connection openConnection() throws SQLException {
-			//log.info("url={}, user={}, password={}", config.database.url, config.database.password);
-			Connection conn = DriverManager.getConnection(config.database.url, config.database.user, config.database.password);
+			Connection conn = DriverManager.getConnection(config.database.url + "/" + config.database.name, config.database.user, config.database.password);
 			conn.setAutoCommit(false);
 			return conn;
 		}
 		
 		
+		public Entity create(Entity entity, String entityName) throws SQLException {
+			return create(Arrays.asList(entity), entityName).get(0);
+		}
 		
-		
+		public List<Entity> create(List<Entity> entities, String entityName) throws SQLException {
+			
+			// get entity type
+			Type entityType = DaoFactory.this.config.model.types.get(entityName);
+			if(entityType == null) {
+				throw new IllegalArgumentException("Unknown entity type: " + entityName + ".");
+			}
+			
+			
+			
+			// create row with fields in the main table
+			Sql sql = new Sql(conn);
+			List<Entity> createdEntities = new ArrayList<>();
+			for(Entity entity : entities) {
+				List<String> columns = new ArrayList<>();
+				List<String> columnTypes = new ArrayList<>();
+				List<Object> columnValues = new ArrayList<>();
+				for(String fieldName : entity.keySet()) {
+					Field field = entityType.fields.get(fieldName);
+					if(field.relation == Relation.None) {
+						columns.add(field.name);
+						columnTypes.add(sqlDataType(field));
+						columnValues.add(entity.get(field.name));
+					}
+				}
+				int id = sql.insertInto(entityType.name, columns, columnTypes, columnValues);
+				createdEntities.add(Entity.asEntity(entityType.id.name, id));
+			}
+			
+			
+			return createdEntities;
+			
+		}
+		public Entity read(int id, Selection select) { return null; }
+		public Entity update(Entity entity) { return null; }
+		public Entity delete(int id, Selection select) { return null; }
 		
 		
 		public void commit() throws SQLException {
 			conn.commit();
+			conn.close();
+			conn = openConnection();
+		}
+		
+		public void reset() throws SQLException {
 			conn.close();
 			conn = openConnection();
 		}

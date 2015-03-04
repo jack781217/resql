@@ -3,9 +3,14 @@ package idv.jhuang.sql4j;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
+import java.util.Collections;
+import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -93,6 +98,67 @@ public class Sql {
 				stmt.execute(sql);
 			}
 			
+		}
+	}
+	
+	public int insertInto(String table, List<String> columns, List<String> types, List<Object> values) throws SQLException {
+		String sql = String.format("INSERT INTO %s(%s) VALUES (%s);", table, 
+				String.join(", ", columns),
+				String.join(", ", Collections.nCopies(columns.size(), "?")));
+		
+		int idx = -1;
+		try(PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+			for(int i = 0; i < columns.size(); i++) {
+				setParameter(pstmt, i + 1, values.get(i), types.get(i));
+			}
+			log.debug("SQL> {}", sql);
+			pstmt.executeUpdate();
+			ResultSet rs = pstmt.getGeneratedKeys();
+			if(rs.next())
+				idx = rs.getInt(1);
+		}
+		
+		return idx;
+	}
+	
+	private void setParameter(PreparedStatement pstmt, int idx, Object value, String type) throws SQLException {
+		if(type.startsWith("ENUM("))
+			type = "ENUM";
+		
+		switch(type) {
+		case "INTEGER":
+			if(value == null)
+				pstmt.setNull(idx, Types.INTEGER);
+			else
+				pstmt.setInt(idx, (Integer)value);
+			break;
+		case "ENUM":
+		case "VARCHAR(255)":
+			if(value == null)
+				pstmt.setNull(idx, Types.VARCHAR);
+			else
+				pstmt.setString(idx, (String)value);
+			break;
+		case "DOUBLE":
+			if(value == null)
+				pstmt.setNull(idx, Types.DOUBLE);
+			else
+				pstmt.setDouble(idx, (Double)value);
+			break;
+		case "BOOLEAN":
+			if(value == null)
+				pstmt.setNull(idx, Types.BOOLEAN);
+			else
+				pstmt.setBoolean(idx, (Boolean)value);
+			break;
+		case "DATE":
+			if(value == null)
+				pstmt.setNull(idx, Types.DATE);
+			else
+				pstmt.setDate(idx, Date.valueOf((String)value));
+			break;
+		default:
+			throw new IllegalArgumentException("Unsuppoted SQL type: " + type + ".");
 		}
 	}
 	
