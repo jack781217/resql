@@ -119,7 +119,7 @@ public class Configuration {
 							"Invalid property 'remote' in Field %s.%s: %s. Property 'remote' must be null or non-empty if 'relation' is not null.",
 							type.name, fieldNode.name, field.remote);
 				}
-				field.remote = fieldNode.remote;
+				
 					
 				// sparse
 				
@@ -172,16 +172,18 @@ public class Configuration {
 			for(FieldXmlNode fieldNode : typeNode.fields) {
 				Field field = type.fields.get(fieldNode.name);
 				
-				if(field.remote != null) {
+				if(fieldNode.remote != null) {
 					Type remoteModel = field.type;
 					Field remoteField = new Field();
-					remoteField.name = field.remote;
+					remoteField.name = fieldNode.remote;
 					remoteField.type = type;
 					remoteField.relation = Field.Relation.opposite(field.relation);
-					remoteField.remote = field.name;
+					remoteField.remote = field;
 					remoteField.values = null;
-					remoteField.sparse = true;
+					remoteField.sparse = field.sparse;
 					remoteField.master = false;
+					
+					field.remote = remoteField;
 					
 					checkState(!remoteModel.fields.containsKey(remoteField.name),
 							"Cannot create remote field %s.%s from %s.%s: field name alreayd used.",
@@ -312,7 +314,7 @@ public class Configuration {
 		public String name;
 		public Type type;
 		public Relation relation;
-		public String remote;
+		public Field remote;
 		public boolean sparse;
 		public boolean master;
 		public List<String> values;

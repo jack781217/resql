@@ -9,6 +9,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -101,6 +103,38 @@ public class Sql {
 		}
 	}
 	
+	
+	
+	public List<Object> insertInto(String table, List<String> columns, List<String> types, List<List<Object>> valuess) throws SQLException {
+		String sql = String.format("INSERT INTO %s(%s) VALUES %s;", table, 
+				String.join(", ", columns),
+				String.join(", ", Collections.nCopies(valuess.size(), 
+						"(" + String.join(", ", Collections.nCopies(columns.size(), "?")) + ")" )));
+		
+		if(valuess.isEmpty())
+			return new ArrayList<>();
+		
+		List<Object> ids = new ArrayList<>();
+		try(PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+			
+			for(int i = 0, k = 1; i < valuess.size(); i++) {
+				List<Object> values = valuess.get(i);
+				for(int j = 0; j < values.size(); j++, k++) {
+					setParameter(pstmt, k, values.get(j), types.get(j));
+				}
+			}
+			
+			log.debug("SQL> {}", sql);
+			pstmt.executeUpdate();
+			ResultSet rs = pstmt.getGeneratedKeys();
+			while(rs.next())
+				ids.add(rs.getInt(1));
+		}
+		
+		return ids;
+	}
+	
+	/*
 	public int insertInto(String table, List<String> columns, List<String> types, List<Object> values) throws SQLException {
 		String sql = String.format("INSERT INTO %s(%s) VALUES (%s);", table, 
 				String.join(", ", columns),
@@ -119,6 +153,54 @@ public class Sql {
 		}
 		
 		return idx;
+	}*/
+	public void updateSet(String table, String column, String type, Object value, String idColumn, String idType, Object idValue) throws SQLException {
+		updateSet(table, Arrays.asList(column), Arrays.asList(type), Arrays.asList(value), idColumn, idType, idValue);
+	}
+	public void updateSet(String table, List<String> columns, List<String> types, List<Object> values, 
+			String idColumn, String idType, Object idValue) throws SQLException {
+		String sql = String.format("UPDATE %s SET %s WHERE %s=?;",
+				table, 
+				String.join("=?, ", columns) + "=?",
+				idColumn);
+		try(PreparedStatement pstmt = conn.prepareStatement(sql)) {
+			for(int i = 0; i < columns.size(); i++) {
+				setParameter(pstmt, i + 1, values.get(i), types.get(i));
+			}
+			setParameter(pstmt, columns.size() + 1, idValue, idType);
+			log.debug("SQL> {}", sql);
+			pstmt.executeUpdate();
+		}
+	}
+	public void deleteFrom(String table, String column, String type, Object values) throws SQLException {
+		deleteFrom(table, Arrays.asList(column), Arrays.asList(type), Arrays.asList(values));
+	}
+	public void deleteFrom(String table, List<String> columns, List<String> types, List<Object> values) throws SQLException {
+		String sql = String.format("DELETE FROM %s WHERE %s;", 
+				table, 
+				String.join("=? AND", columns) + "=?");
+		try(PreparedStatement pstmt = conn.prepareStatement(sql)) {
+			for(int i = 0; i < columns.size(); i++) {
+				setParameter(pstmt, i + 1, values.get(i), types.get(i));
+			}
+			log.debug("SQL> {}", sql);
+			pstmt.executeUpdate();
+		}
+	}
+	
+	/**
+	 * Test existence
+	 */
+	public int selectExist(String table, String idColumn, String idType, Object idValue) throws SQLException {
+		String sql = String.format("SELECT EXISTS(SELECT 1 FROM %s WHERE %s=? LIMIT 1);",
+				table, idColumn);
+		
+		try(PreparedStatement pstmt = conn.prepareStatement(sql)) {
+			setParameter(pstmt, 1, idValue, idType);
+			ResultSet rs = pstmt.executeQuery();
+			rs.next();
+			return rs.getInt(1);
+		}
 	}
 	
 	private void setParameter(PreparedStatement pstmt, int idx, Object value, String type) throws SQLException {

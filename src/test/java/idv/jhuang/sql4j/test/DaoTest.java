@@ -1,5 +1,7 @@
 package idv.jhuang.sql4j.test;
 
+import java.util.Arrays;
+
 import idv.jhuang.sql4j.Configuration;
 import idv.jhuang.sql4j.DaoFactory;
 import idv.jhuang.sql4j.DaoFactory.Dao;
@@ -13,23 +15,75 @@ public class DaoTest {
 	private static final Logger log = LogManager.getLogger(DaoTest.class);
 
 	@Test
-	public void test() throws Exception {
+	public void test1() throws Exception {
 		DaoFactory factory = new DaoFactory(Configuration.parseConfiguration(
 				getClass().getClassLoader().getResourceAsStream("sql4j.xml")));
 		factory.init();
 		
 		Dao dao = factory.createDao();
-		Entity entity = dao.create(Entity.asEntity(
+		Entity entity = dao.createOrUpdate("Student", Entity.asEntity(
 				"name", "Jack Huang",
 				"age", 24,
 				"gender", "male",
 				"dateOfBirth", "1989-12-17",
-				"hasGraduated", true), "Student");
+				"hasGraduated", true,
+				
+				"school", Entity.asEntity("name", "Stanford"),
+				"transcript", Entity.asEntity("gpa", 3.999),
+				"courses", Arrays.asList(
+						Entity.asEntity("name", "machine learning"),
+						Entity.asEntity("name", "data mining")),
+				"emails", Arrays.asList(
+						Entity.asEntity("address", "jack.huang78@gmail.com"),
+						Entity.asEntity("address", "jack.huang@stanford.edu")),
+						
+				"advisor", Entity.asEntity("name", "Sanjay Srinivasan"),
+				"dormRoom", Entity.asEntity("location", "Jester 8F")
+				
+				));
 		dao.commit();
+		
+		
 		
 		log.info(entity);
 		
 	}
+	
+	//@Test
+	public void test2() throws Exception {
+		DaoFactory factory = new DaoFactory(Configuration.parseConfiguration(
+				getClass().getClassLoader().getResourceAsStream("sql4j.xml")));
+		factory.init();
+		
+		Dao dao = factory.createDao();
+		Entity entity = dao.createOrUpdate("Transcript", Entity.asEntity(
+				"gpa", 3.99,
+				"owner", Entity.asEntity("name", "s1")));
+		entity = dao.createOrUpdate("DormRoom", Entity.asEntity(
+				"location", "Jester 9F",
+				"student", Entity.asEntity("name", "s2")));
+		entity = dao.createOrUpdate("Advisor", Entity.asEntity(
+				"name", "Sanjay Srinivasan",
+				"students", Arrays.asList(Entity.asEntity("name", "s3"), Entity.asEntity("name", "s4"))));
+	
+		entity = dao.createOrUpdate("School", Entity.asEntity( 
+				"name", "Stanford",
+				"students", Arrays.asList(Entity.asEntity("name", "s5"), Entity.asEntity("name", "s6"))
+				));
+		
+		entity = dao.createOrUpdate("Course", Entity.asEntity(
+				"name", "Machine Learning",
+				"students", Arrays.asList(Entity.asEntity("name", "s7"), Entity.asEntity("name", "s8"))
+				));
+		entity = dao.createOrUpdate("Email", Entity.asEntity(
+				"address", "jack.huang78@gmail.com",
+				"owner", Entity.asEntity("name", "s9")
+				));
+		
+		dao.commit();
+		
+	}
+	
 	
 	
 	

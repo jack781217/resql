@@ -1,21 +1,21 @@
 package idv.jhuang.sql4j;
 
+import static com.google.common.base.Preconditions.checkState;
+import static idv.jhuang.sql4j.Configuration.Field.Relation.ManyToMany;
 import static idv.jhuang.sql4j.Configuration.Field.Relation.ManyToOne;
 import static idv.jhuang.sql4j.Configuration.Field.Relation.None;
 import static idv.jhuang.sql4j.Configuration.Field.Relation.OneToMany;
 import static idv.jhuang.sql4j.Configuration.Field.Relation.OneToOne;
 import idv.jhuang.sql4j.Configuration.Field;
-import idv.jhuang.sql4j.Configuration.Field.Relation;
 import idv.jhuang.sql4j.Configuration.Type;
+import idv.jhuang.sql4j.exception.EntityNotFoundException;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -135,38 +135,194 @@ public class DaoFactory {
 		}
 		
 		
-		public Entity create(Entity entity, String entityName) throws SQLException {
-			return create(Arrays.asList(entity), entityName).get(0);
+		public Entity createOrUpdate(String entityName, Entity entity) throws SQLException {
+			List<Entity> createdEntities = createOrUpdate(entityName, Arrays.asList(entity));
+			return createdEntities.isEmpty() ? null : createdEntities.get(0);
 		}
 		
-		public List<Entity> create(List<Entity> entities, String entityName) throws SQLException {
+		public List<Entity> createOrUpdate(String entityName, List<Entity> entities) throws SQLException {
 			
 			// get entity type
-			Type entityType = DaoFactory.this.config.model.types.get(entityName);
-			if(entityType == null) {
+			Type type = DaoFactory.this.config.model.types.get(entityName);
+			if(type == null) {
 				throw new IllegalArgumentException("Unknown entity type: " + entityName + ".");
 			}
 			
 			
-			
-			// create row with fields in the main table
+
 			Sql sql = new Sql(conn);
 			List<Entity> createdEntities = new ArrayList<>();
 			for(Entity entity : entities) {
+				
+				Object id = entity.get(type.id.name);
+				if(id != null) {
+					if(sql.selectExist(type.name, type.id.name, sqlDataType(type.id), id) != 1) {
+						throw new EntityNotFoundException("%s[%d]", type.name, id);
+					}
+				} else {
+					id = sql.insertInto(type.name, Arrays.asList(), Arrays.asList(), Arrays.asList(Arrays.asList())).get(0);
+				}
+				
+				
+				
+				// create row with fields in the main table
 				List<String> columns = new ArrayList<>();
 				List<String> columnTypes = new ArrayList<>();
 				List<Object> columnValues = new ArrayList<>();
 				for(String fieldName : entity.keySet()) {
-					Field field = entityType.fields.get(fieldName);
-					if(field.relation == Relation.None) {
-						columns.add(field.name);
-						columnTypes.add(sqlDataType(field));
-						columnValues.add(entity.get(field.name));
+					Field field = type.fields.get(fieldName);
+					
+					if(field.master) {
+						if(!field.sparse) {
+							if(field.relation == None) {
+								Object value = entity.get(field.name);
+								columns.add(field.name);
+								columnTypes.add(sqlDataType(field));
+								columnValues.add(value);
+							} else if(field.relation == OneToOne || field.relation == ManyToOne) {
+								Object childId = createOrUpdate(field.type.name, entity.get(field.name)).get(field.type.id.name);
+								columns.add(sqlFKName(field));
+								columnTypes.add(sqlDataType(field.type.id));
+								columnValues.add(childId);
+							} else {
+								checkState(false, "Sparse field %s has relation %s.", field.name, field.relation);
+							}
+							
+						} else {
+							if(field.relation == None) {
+								Object value = entity.get(field.name);
+								String table = sqlJoinTableName(type, field);
+								sql.deleteFrom(table, type.id.name, sqlDataType(type.id), id);
+								if(value != null) {
+									sql.insertInto(table, 
+											Arrays.asList(type.id.name, field.name), 
+											Arrays.asList(sqlDataType(type.id), sqlDataType(field)), 
+											Arrays.asList(Arrays.asList(id, value)));
+								}
+							/*} else if(field.relation == OneToOne || field.relation == ManyToOne) {
+								Object childId = createOrUpdate(field.type.name, entity.get(field.name)).get(field.type.id.name);
+								String table = sqlJoinTableName(type, field);
+								sql.deleteFrom(table, type.id.name, sqlDataType(type.id), id);
+								if(childId != null) {
+									sql.insertInto(table, 
+											Arrays.asList(type.id.name, sqlFKName(field)), 
+											Arrays.asList(sqlDataType(type.id), sqlDataType(field.type.id)), 
+											Arrays.asList(Arrays.asList(id, childId)));
+								}*/
+							} else {
+								String table = sqlJoinTableName(type, field);
+								sql.deleteFrom(table, type.id.name, sqlDataType(type.id), id);
+								
+								List<Entity> children = (field.relation == OneToOne || field.relation == ManyToOne) ?
+										createOrUpdate(field.type.name, Arrays.asList((Entity)entity.get(field.name))) :	
+										createOrUpdate(field.type.name, (List<Entity>)entity.get(field.name));
+								List<List<Object>> valuess = new ArrayList<>();
+								for(Entity child : children) {
+									valuess.add(Arrays.asList((Object)id, child.get(field.type.id.name)));
+								}
+								sql.insertInto(table, 
+										Arrays.asList(type.id.name, sqlFKName(field)), 
+										Arrays.asList(sqlDataType(type.id), sqlDataType(field.type.id)), 
+										valuess);
+							}
+						}
+						/*}
+					
+					if(field.master) {
+						switch(field.relation) {
+						case None:
+							Object value = entity.get(field.name);
+							if(!field.sparse) {
+								columns.add(field.name);
+								columnTypes.add(sqlDataType(field));
+								columnValues.add(value);
+							} else {
+								String table = sqlJoinTableName(type, field);
+								sql.deleteFrom(table, type.id.name, sqlDataType(type.id), id);
+								if(value != null) {
+									sql.insertInto(table, 
+											Arrays.asList(type.id.name, field.name), 
+											Arrays.asList(sqlDataType(type.id), sqlDataType(field)), 
+											Arrays.asList(Arrays.asList(id, value)));
+								}
+							}
+							break;
+						
+						case OneToOne:
+						case ManyToOne:
+							Object childId = createOrUpdate(field.type.name, entity.get(field.name)).get(field.type.id.name);
+							if(!field.sparse) {
+								columns.add(sqlFKName(field));
+								columnTypes.add(sqlDataType(field.type.id));
+								columnValues.add(childId);
+							
+							} else {
+								String table = sqlJoinTableName(type, field);
+								sql.deleteFrom(table, type.id.name, sqlDataType(type.id), id);
+								if(childId != null) {
+									sql.insertInto(table, 
+											Arrays.asList(type.id.name, sqlFKName(field)), 
+											Arrays.asList(sqlDataType(type.id), sqlDataType(field.type.id)), 
+											Arrays.asList(Arrays.asList(id, childId)));
+								}
+							}
+							break;
+						
+						case OneToMany:
+						case ManyToMany:
+							String table = sqlJoinTableName(type, field);
+							sql.deleteFrom(table, type.id.name, sqlDataType(type.id), id);
+							
+							List<Entity> children = entity.get(field.name);
+							children = createOrUpdate(field.type.name, children);
+							List<List<Object>> valuess = new ArrayList<>();
+							for(Entity child : children) {
+								valuess.add(Arrays.asList((Object)id, child.get(field.type.id.name)));
+							}
+							sql.insertInto(table, 
+									Arrays.asList(type.id.name, sqlFKName(field)), 
+									Arrays.asList(sqlDataType(type.id), sqlDataType(field.type.id)), 
+									valuess);
+							break;
+						}
+					*/
+					} else {
+						List<Entity> children = (field.relation == OneToOne || field.relation == ManyToOne) ?
+								createOrUpdate(field.type.name, Arrays.asList((Entity)entity.get(field.name))) :
+								createOrUpdate(field.type.name, (List<Entity>)entity.get(field.name));
+						if(!field.sparse) {
+							checkState(field.relation != None && field.relation != ManyToOne && field.relation != ManyToMany,
+									"Invalid relation for sparse field %s: %s", field.name, field.relation);
+							for(Entity child : children) {
+								sql.updateSet(field.type.name, 
+										sqlFKName(field.remote), sqlDataType(type.id), id, 
+										field.type.id.name, sqlDataType(field.type.id), child.get(field.type.id.name));
+							}
+						} else {
+							String table = sqlJoinTableName(field.type, field.remote);
+							sql.deleteFrom(table, sqlFKName(field.remote), sqlDataType(type.id), id);
+							List<List<Object>> valuess = new ArrayList<>();
+							for(Entity child : children)
+								valuess.add(Arrays.asList(child.get(field.type.id.name), id));
+							
+							sql.insertInto(table, 
+									Arrays.asList(field.type.id.name, sqlFKName(field.remote)), 
+									Arrays.asList(sqlDataType(field.type.id), sqlDataType(type.id)), 
+									valuess);
+						}
+								
+						
 					}
+					
 				}
-				int id = sql.insertInto(entityType.name, columns, columnTypes, columnValues);
-				createdEntities.add(Entity.asEntity(entityType.id.name, id));
+				sql.updateSet(type.name, columns, columnTypes, columnValues, type.id.name, sqlDataType(type.id), id);
+				
+				
+				
+				createdEntities.add(Entity.asEntity(type.id.name, id));
 			}
+			
+			
 			
 			
 			return createdEntities;

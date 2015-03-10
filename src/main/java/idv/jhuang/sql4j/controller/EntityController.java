@@ -42,7 +42,7 @@ public class EntityController extends Controller {
 		try(Dao dao = factory.createDao()) {
 			List<Entity> entities = mapper.readValue(entityJson, List.class);
 			
-			List<Entity> createdEntities = dao.create(entities, entityName);
+			List<Entity> createdEntities = dao.createOrUpdate(entityName, entities);
 			
 			dao.commit();
 			
