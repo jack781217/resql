@@ -8,8 +8,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
 @SuppressWarnings("serial")
 public class Entity extends LinkedHashMap<String, Object> {
+	private static final Logger log = LogManager.getLogger(Entity.class);
+	private static ObjectMapper mapper = new ObjectMapper()
+		.enable(SerializationFeature.INDENT_OUTPUT);
 
 	public Entity() {
 		super();
@@ -29,6 +39,16 @@ public class Entity extends LinkedHashMap<String, Object> {
 	
 	public <T> void set(String field, T value) {
 		super.put(field, value);
+	}
+	
+	@Override
+	public String toString() {
+		try {
+			return mapper.writeValueAsString(this);
+		} catch (JsonProcessingException e) {
+			log.error("Failed to convert to JSON.", e);
+			return "ERROR";
+		}
 	}
 	
 	

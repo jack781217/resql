@@ -19,6 +19,7 @@
 			<field name="courses" type="Course" relation="ManyToMany" remote="students" />
 			<field name="emails" type="Email" relation="OneToMany" remote="owner" />
 
+			<field name="car" type="string" sparse="true" />
 			<field name="advisor" type="Advisor" relation="ManyToOne" sparse="true" remote="students"/>
 			<field name="dormRoom" type="DormRoom" relation="OneToOne" sparse="true" remote="student" />
 			

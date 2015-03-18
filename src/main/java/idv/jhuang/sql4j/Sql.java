@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -134,31 +136,109 @@ public class Sql {
 		return ids;
 	}
 	
-	/*
-	public int insertInto(String table, List<String> columns, List<String> types, List<Object> values) throws SQLException {
-		String sql = String.format("INSERT INTO %s(%s) VALUES (%s);", table, 
-				String.join(", ", columns),
-				String.join(", ", Collections.nCopies(columns.size(), "?")));
+	/*public List<List<Object>> selectFrom(String table, List<String> columns, List<String> types, boolean and) throws SQLException {
+		return selectFrom(table, columns, types, Arrays.asList(), Arrays.asList(), Arrays.asList(), and);
+	}*/
+	
+	
+	public List<List<Object>> selectFrom(String table, List<String> columns, List<String> types, 
+			List<String> critColumns, List<String> critTypes, List<String> critConds,
+			List<List<String>> critOpss, List<List<Object>> critValuess) throws SQLException {
 		
-		int idx = -1;
-		try(PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-			for(int i = 0; i < columns.size(); i++) {
-				setParameter(pstmt, i + 1, values.get(i), types.get(i));
-			}
-			log.debug("SQL> {}", sql);
-			pstmt.executeUpdate();
-			ResultSet rs = pstmt.getGeneratedKeys();
-			if(rs.next())
-				idx = rs.getInt(1);
+		if(critValuess == null) {
+			critValuess = new ArrayList<>();
 		}
 		
-		return idx;
+		String critStr = "";
+		for(int i = 0; i < critValuess.size(); i++) {
+			if(i > 0)
+				critStr += ") AND (";
+			for(int j = 0; j < critValuess.get(i).size(); j++) {
+				if(j > 0)
+					critStr += " " + critConds.get(i) + " ";
+				critStr += critColumns.get(i) + " " + critOpss.get(i).get(j) + " " + "?";
+			}
+		}
+		if(!critStr.isEmpty())
+			critStr = "(" + critStr + ")";
+		
+		
+		String sql = critStr.isEmpty() ?
+				String.format("SELECT %s FROM %s;", String.join(", ", columns), table) :
+				String.format("SELECT %s FROM %s WHERE %s;",
+				String.join(", ", columns), table,
+				critStr
+				);
+		
+		log.debug("SQL> {}", sql);
+		
+		List<List<Object>> rows = new ArrayList<>();
+		try(PreparedStatement pstmt = conn.prepareStatement(sql)) {
+			
+			for(int i = 0, k = 0; i < critColumns.size(); i++)
+				for(int j = 0; j < critValuess.get(i).size(); j++, k++) {
+					setParameter(pstmt, k + 1, 
+							critValuess.get(i).get(j),
+							critTypes.get(i));
+				}
+				
+			
+			log.debug("SQL> {}", sql);
+			ResultSet rs = pstmt.executeQuery();
+			
+			while(rs.next()) {
+				List<Object> row = new ArrayList<>();
+				for(int i = 0; i < columns.size(); i++)
+					row.add(getParameter(rs, i + 1, types.get(i)));
+				rows.add(row);
+			}
+			
+			
+		}
+		
+		
+		return rows;
+		
+	}
+	
+	/*public List<List<Object>> selectFrom(String table, List<String> columns, List<String> types,
+			List<String> critColumns, List<String> critTypes, List<Object> critValues, boolean and) throws SQLException {
+		String condOp = and ? "AND" : "OR";
+		String sql = critColumns.isEmpty() ?
+				String.format("SELECT %s FROM %s;", 
+						String.join(", ", columns), table) :	
+				String.format("SELECT %s FROM %s WHERE %s;", 
+						String.join(", ", columns), table, String.join("=? " + condOp, critColumns) + "=?");
+		
+		List<List<Object>> rows = new ArrayList<>();
+		try(PreparedStatement pstmt = conn.prepareStatement(sql)) {
+			
+			for(int i = 0; i < critColumns.size(); i++) 
+				setParameter(pstmt, i + 1, critValues.get(i), critTypes.get(i));
+			
+			log.debug("SQL> {}", sql);
+			ResultSet rs = pstmt.executeQuery();
+			
+			while(rs.next()) {
+				List<Object> row = new ArrayList<>();
+				for(int i = 0; i < columns.size(); i++)
+					row.add(getParameter(rs, i + 1, types.get(i)));
+				rows.add(row);
+			}
+			
+			
+		}
+		
+		
+		return rows;
 	}*/
+	
 	public void updateSet(String table, String column, String type, Object value, String idColumn, String idType, Object idValue) throws SQLException {
 		updateSet(table, Arrays.asList(column), Arrays.asList(type), Arrays.asList(value), idColumn, idType, idValue);
 	}
 	public void updateSet(String table, List<String> columns, List<String> types, List<Object> values, 
 			String idColumn, String idType, Object idValue) throws SQLException {
+		
 		String sql = String.format("UPDATE %s SET %s WHERE %s=?;",
 				table, 
 				String.join("=?, ", columns) + "=?",
@@ -239,6 +319,27 @@ public class Sql {
 			else
 				pstmt.setDate(idx, Date.valueOf((String)value));
 			break;
+		default:
+			throw new IllegalArgumentException("Unsuppoted SQL type: " + type + ".");
+		}
+	}
+	private Object getParameter(ResultSet rs, int idx, String type) throws SQLException {
+		if(type.startsWith("ENUM("))
+			type = "ENUM";
+		
+		
+		switch(type) {
+		case "INTEGER":
+			return (Integer) rs.getInt(idx);
+		case "ENUM":
+		case "VARCHAR(255)":
+			return (String) rs.getString(idx);
+		case "DOUBLE":
+			return (Double) rs.getDouble(idx);
+		case "BOOLEAN":
+			return (Boolean) rs.getBoolean(idx);
+		case "DATE":
+			return (Date) rs.getDate(idx);
 		default:
 			throw new IllegalArgumentException("Unsuppoted SQL type: " + type + ".");
 		}

@@ -1,11 +1,12 @@
 package idv.jhuang.sql4j.test;
 
-import java.util.Arrays;
-
 import idv.jhuang.sql4j.Configuration;
 import idv.jhuang.sql4j.DaoFactory;
 import idv.jhuang.sql4j.DaoFactory.Dao;
 import idv.jhuang.sql4j.Entity;
+
+import java.util.Arrays;
+import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -37,15 +38,27 @@ public class DaoTest {
 						Entity.asEntity("address", "jack.huang78@gmail.com"),
 						Entity.asEntity("address", "jack.huang@stanford.edu")),
 						
+				"car", "Nissan Altima",
 				"advisor", Entity.asEntity("name", "Sanjay Srinivasan"),
 				"dormRoom", Entity.asEntity("location", "Jester 8F")
 				
 				));
+		
+		dao.createOrUpdate("Student", Entity.asEntity("name", "Jeff Huang"));
 		dao.commit();
 		
+		List<Entity> students = dao.read("Student", Arrays.asList(1,3), Entity.asEntity(
+				"id", "", "name", "", "car", "",
+				"advisor", Entity.asEntity("name", ""),  
+				"school", Entity.asEntity("name", ""),
+				"emails", Entity.asEntity("address", ""),
+				"transcript", Entity.asEntity("gpa", ""),
+				"courses", Entity.asEntity("name", "")
+				
+				));
 		
 		
-		log.info(entity);
+		log.info(students);
 		
 	}
 	
