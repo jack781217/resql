@@ -304,7 +304,9 @@ public class DaoFactory {
 			columns.add(type.id.name);
 			types.add(sqlDataType(type.id));
 			for(String fieldName : selectMap.keySet()) {
+				log.info("check {}.{}", type.name, fieldName);
 				Field field = type.fields.get(fieldName);
+				
 				
 				if(fieldName.equals(type.id.name)) {
 					columns.add(fieldName);
@@ -312,10 +314,11 @@ public class DaoFactory {
 				} else if(field.relation == None && !field.sparse) {
 					columns.add(field.name);
 					types.add(sqlDataType(field));
-				} else if((field.relation == OneToOne || field.relation == ManyToOne) && !field.sparse) {
+				} else if(field.master && (field.relation == OneToOne || field.relation == ManyToOne) && !field.sparse) {
 					columns.add(sqlFKName(field));
 					types.add(sqlDataType(field.type.id));
 				}
+				
 			}
 			
 			
@@ -372,6 +375,8 @@ public class DaoFactory {
 								childId = mappingRows.get(0).get(0);
 							}
 						}
+
+						//log.info(field.name);
 						
 						if(childId != null) {
 							Entity childEntity = read(field.type.name, asList(childId), 
@@ -395,6 +400,37 @@ public class DaoFactory {
 						List<Entity> childEntities = read(field.type.name, childIds, 
 								(Map<String, Object>)selectMap.get(field.name));
 						entity.put(field.name, childEntities);
+						
+					} else if(!field.master && (field.relation == OneToOne || field.relation == OneToMany || field.relation == ManyToOne || field.relation == ManyToMany)) {
+						List<Object> childIds = new ArrayList<>();
+						
+						if((field.relation == OneToOne || field.relation == OneToMany) && !field.remote.sparse) {
+							List<List<Object>> mappingRows = sql.selectFrom(field.type.name, 
+									asList(field.type.id.name), asList(sqlDataType(field.type.id)),
+									asList(sqlFKName(field.remote)), asList(sqlDataType(type.id)), asList("OR"),
+									asList(asList("=")), asList(asList(id)));
+							if(!mappingRows.isEmpty())
+								childIds.add(mappingRows.get(0).get(0));
+							
+						} else {
+						
+							List<List<Object>> mappingRows = sql.selectFrom(sqlJoinTableName(field.type, field.remote),
+									asList(field.type.id.name), asList(sqlDataType(field.type.id)),
+									asList(sqlFKName(field.remote)), asList(sqlDataType(type.id)), asList("OR"),
+									asList(asList("=")), asList(asList(id)));
+							for(List<Object> mappingRow : mappingRows) {
+								childIds.add(mappingRow.get(0));
+							}
+						}
+						
+						List<Entity> childEntities = read(field.type.name, childIds, 
+								(Map<String, Object>)selectMap.get(field.name));
+						if(field.relation == OneToOne ||field.relation == ManyToOne) {
+							if(!childEntities.isEmpty())
+								entity.put(field.name, childEntities.get(0));
+						} else if(field.relation == ManyToMany || field.relation == OneToMany) {
+							entity.put(field.name, childEntities);
+						}
 					}
 				}
 				entities.add(entity);
