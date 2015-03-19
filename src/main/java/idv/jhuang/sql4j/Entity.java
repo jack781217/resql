@@ -1,5 +1,6 @@
 package idv.jhuang.sql4j;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import idv.jhuang.sql4j.Configuration.Field;
 import idv.jhuang.sql4j.Configuration.Type;
 
@@ -37,6 +38,32 @@ public class Entity extends LinkedHashMap<String, Object> {
 		return (T) super.get(field);
 	}
 	
+	public <T> T get(String field, Class<T> clazz) {
+		return (T) super.get(field);
+	}
+	
+	public <T> List<T> getList(String field, Class<T> clazz) {
+		return (List<T>) super.get(field);
+	}
+	
+	public List<Entity> getEntityList(String field) {
+		return getList(field, Entity.class);
+	}
+	
+	public Entity getEntity(String field) {
+		return get(field, Entity.class);
+	}
+	
+	/*public long getLong(String field) {
+		return ((Number) super.get(field)).longValue();
+	}
+	public double getDouble(String field) {
+		return ((Number) super.get(field)).doubleValue();
+	}
+	public boolean getBoolean(String field) {
+		return ((Boolean)super.get(field)).booleanValue();
+	}*/
+	
 	public <T> void set(String field, T value) {
 		super.put(field, value);
 	}
@@ -54,6 +81,7 @@ public class Entity extends LinkedHashMap<String, Object> {
 	
 	
 	public static Entity asEntity(Object... objs) {
+		checkArgument(objs.length % 2 == 0, "Length of objects must be mutlipe of 2.");
 		Entity entity = new Entity();
 		for(int i = 0; i < objs.length; i += 2)
 			entity.put((String)objs[i], objs[i + 1]);

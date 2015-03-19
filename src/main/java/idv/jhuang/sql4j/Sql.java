@@ -170,7 +170,7 @@ public class Sql {
 				critStr
 				);
 		
-		log.debug("SQL> {}", sql);
+		//log.debug("SQL> {}", sql);
 		
 		List<List<Object>> rows = new ArrayList<>();
 		try(PreparedStatement pstmt = conn.prepareStatement(sql)) {
