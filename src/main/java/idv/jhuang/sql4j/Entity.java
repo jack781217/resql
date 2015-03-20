@@ -46,13 +46,7 @@ public class Entity extends LinkedHashMap<String, Object> {
 		return (List<T>) super.get(field);
 	}
 	
-	public List<Entity> getEntityList(String field) {
-		return getList(field, Entity.class);
-	}
 	
-	public Entity getEntity(String field) {
-		return get(field, Entity.class);
-	}
 	
 	/*public long getLong(String field) {
 		return ((Number) super.get(field)).longValue();

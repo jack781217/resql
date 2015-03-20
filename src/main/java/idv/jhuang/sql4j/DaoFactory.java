@@ -16,6 +16,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -146,20 +147,21 @@ public class DaoFactory {
 		/**
 		 * @category CRUD
 		 */
-		public Entity createOrUpdate(Type type, Entity entity) throws SQLException {
-			log.debug("createOrUpdate {}:\n{}", type.name, entity.toString());
+		public Entity createOrUpdate(String typeName, Entity entity) throws SQLException {
+			log.debug("createOrUpdate {}:\n{}", typeName, entity.toString());
 			
-			List<Entity> createdEntities = createOrUpdate(type, asList(entity));
+			List<Entity> createdEntities = createOrUpdate(typeName, asList(entity));
 			return createdEntities.isEmpty() ? null : createdEntities.get(0);
 		}
 		
 		/**
 		 * @category CRUD
 		 */
-		public List<Entity> createOrUpdate(Type type, List<Entity> entities) throws SQLException {
-			log.debug("createOrUpdate {}:\n{}", type.name, entities.toString());
+		public List<Entity> createOrUpdate(String typeName, List<Entity> entities) throws SQLException {
+			log.debug("createOrUpdate {}:\n{}", typeName, entities.toString());
 			
-			checkArgument(type != null, "Type cannot be null.");
+			Type type = config.model.types.get(typeName);
+			checkArgument(type != null, "Undefined type given: %s.", typeName);
 
 			Sql sql = new Sql(conn);
 			List<Entity> createdEntities = new ArrayList<>();
@@ -178,7 +180,11 @@ public class DaoFactory {
 				
 				createdEntity.set(type.id.name, id);
 				
-				
+				entity.remove(type.id.name);
+				if(entity.isEmpty()) {
+					createdEntities.add(createdEntity);
+					continue;
+				}
 				
 				// create row with fields in the main table
 				List<String> columns = new ArrayList<>();
@@ -198,7 +204,7 @@ public class DaoFactory {
 								columnTypes.add(sqlDataType(field));
 								columnValues.add(value);
 							} else if(field.relation == OneToOne || field.relation == ManyToOne) {
-								Entity childEntity = createOrUpdate(field.type, entity.get(field.name));
+								Entity childEntity = createOrUpdate(field.type.name, entity.get(field.name));
 								Object childId = childEntity.get(field.type.id.name);
 								columns.add(sqlFKName(field));
 								columnTypes.add(sqlDataType(field.type.id));
@@ -221,8 +227,8 @@ public class DaoFactory {
 								}
 							} else {
 								List<Entity> children = (field.relation == OneToOne || field.relation == ManyToOne) ?
-										createOrUpdate(field.type, asList((Entity)entity.get(field.name))) :	
-										createOrUpdate(field.type, (List<Entity>)entity.get(field.name));
+										createOrUpdate(field.type.name, asList((Entity)entity.get(field.name))) :	
+										createOrUpdate(field.type.name, (List<Entity>)entity.get(field.name));
 								
 								String table = sqlJoinTableName(type, field);
 								sql.deleteFrom(table, type.id.name, sqlDataType(type.id), id);
@@ -245,8 +251,8 @@ public class DaoFactory {
 					// slave fields
 					} else {
 						List<Entity> children = (field.relation == OneToOne || field.relation == ManyToOne) ?
-								createOrUpdate(field.type, asList((Entity)entity.get(field.name))) :
-								createOrUpdate(field.type, (List<Entity>)entity.get(field.name));
+								createOrUpdate(field.type.name, asList((Entity)entity.get(field.name))) :
+								createOrUpdate(field.type.name, (List<Entity>)entity.get(field.name));
 						if(!field.sparse) {
 							checkState(field.relation != None && field.relation != ManyToOne && field.relation != ManyToMany,
 									"Invalid relation for sparse field %s: %s", field.name, field.relation);
@@ -293,13 +299,21 @@ public class DaoFactory {
 			return createdEntities;
 			
 		}
-		
-		public List<Entity> read(Type type, List<Object> ids, Map<String, Object> selectMap) throws SQLException { 
-			log.debug("read {}[{}]: {}", type.name, ids, selectMap);
-			
-			checkArgument(type != null, "Type cannot be null.");
-			
 
+		
+		public Entity read(String typeName, Object id, Map<String, Object> selectMap) throws SQLException {
+			List<Entity> entities = read(typeName, asList(id), selectMap);
+			return entities.isEmpty() ? null : entities.get(0);
+		}
+		
+		public List<Entity> read(String typeName, List<Object> ids, Map<String, Object> selectMap) throws SQLException { 
+			log.debug("read {}{}: {}", typeName, ids, selectMap);
+			
+			Type type = config.model.types.get(typeName);
+			checkArgument(type != null, "Undefined type given: %s.", typeName);
+			
+			if(ids.isEmpty())
+				return Arrays.asList();
 			
 			//set default param if nto provided 
 			if(ids == null)
@@ -393,7 +407,7 @@ public class DaoFactory {
 						//log.info(field.name);
 						
 						if(childId != null) {
-							Entity childEntity = read(field.type, asList(childId), 
+							Entity childEntity = read(field.type.name, asList(childId), 
 									(Map<String, Object>)selectMap.get(field.name)).get(0);
 							entity.put(field.name, childEntity);
 							
@@ -411,7 +425,7 @@ public class DaoFactory {
 							childIds.add(mappingRow.get(0));
 						}
 						
-						List<Entity> childEntities = read(field.type, childIds, 
+						List<Entity> childEntities = read(field.type.name, childIds, 
 								(Map<String, Object>)selectMap.get(field.name));
 						entity.put(field.name, childEntities);
 						
@@ -423,8 +437,11 @@ public class DaoFactory {
 									asList(field.type.id.name), asList(sqlDataType(field.type.id)),
 									asList(sqlFKName(field.remote)), asList(sqlDataType(type.id)), asList("OR"),
 									asList(asList("=")), asList(asList(id)));
-							if(!mappingRows.isEmpty())
-								childIds.add(mappingRows.get(0).get(0));
+							
+							
+							for(List<Object> mappingRow : mappingRows) {
+								childIds.add(mappingRow.get(0));
+							}
 							
 						} else {
 						
@@ -437,7 +454,7 @@ public class DaoFactory {
 							}
 						}
 						
-						List<Entity> childEntities = read(field.type, childIds, 
+						List<Entity> childEntities = read(field.type.name, childIds, 
 								(Map<String, Object>)selectMap.get(field.name));
 						if(field.relation == OneToOne ||field.relation == ManyToOne) {
 							if(!childEntities.isEmpty())

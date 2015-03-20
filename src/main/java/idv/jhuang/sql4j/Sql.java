@@ -239,6 +239,8 @@ public class Sql {
 	public void updateSet(String table, List<String> columns, List<String> types, List<Object> values, 
 			String idColumn, String idType, Object idValue) throws SQLException {
 		
+		checkArgument(!columns.isEmpty(), "No columns to update.");
+		
 		String sql = String.format("UPDATE %s SET %s WHERE %s=?;",
 				table, 
 				String.join("=?, ", columns) + "=?",
