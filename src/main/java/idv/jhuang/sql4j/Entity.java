@@ -5,9 +5,12 @@ import idv.jhuang.sql4j.Configuration.Field;
 import idv.jhuang.sql4j.Configuration.Type;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,21 +49,38 @@ public class Entity extends LinkedHashMap<String, Object> {
 		return (List<T>) super.get(field);
 	}
 	
-	
-	
-	/*public long getLong(String field) {
-		return ((Number) super.get(field)).longValue();
+
+	public <T> Entity put(String... fields) {
+		for(String field : fields)
+			super.put(field, null);
+		return this;
 	}
-	public double getDouble(String field) {
-		return ((Number) super.get(field)).doubleValue();
-	}
-	public boolean getBoolean(String field) {
-		return ((Boolean)super.get(field)).booleanValue();
-	}*/
 	
-	public <T> void set(String field, T value) {
-		super.put(field, value);
+	public Entity set(Object... fieldsAndValues) {
+		checkArgument(fieldsAndValues.length % 2 == 0, "Argument fieldsAndValues must be an array of even numbers of elements.");
+		for(int i = 0; i < fieldsAndValues.length; i += 2) {
+			checkArgument(fieldsAndValues[i] instanceof String, 
+					"Element %d of fieldsAndValues is not a valid field name: %s.", i, fieldsAndValues[i]);
+			super.put((String)fieldsAndValues[i], fieldsAndValues[i + 2]);
+		}
+		
+		return this;
 	}
+	
+	public <T> Entity remove(String... fields) {
+		for(String field : fields)
+			super.remove(field);
+		return this;
+	}
+	
+	public <T> Entity retain(String... fields) {
+		Set<String> fieldsSet = new HashSet<>(Arrays.asList(fields));
+		for(String field : super.keySet())
+			if(!fieldsSet.contains(field))
+				super.remove(field);
+		return this;
+	}
+	
 	
 	@Override
 	public String toString() {
@@ -74,13 +94,14 @@ public class Entity extends LinkedHashMap<String, Object> {
 	
 	
 	
-	public static Entity asEntity(Object... objs) {
+	public static Entity entity(Object... objs) {
 		checkArgument(objs.length % 2 == 0, "Length of objects must be mutlipe of 2.");
 		Entity entity = new Entity();
 		for(int i = 0; i < objs.length; i += 2)
 			entity.put((String)objs[i], objs[i + 1]);
 		return entity;
 	}
+	
 	
 	public static List<Entity> uncompress(List<Object> entityObjs, Type entityType) {
 		List<Entity> entities = new ArrayList<>(entityObjs.size());
@@ -92,7 +113,7 @@ public class Entity extends LinkedHashMap<String, Object> {
 	
 	private static Entity uncompress(Object entityObj, Type entityType) {
 		if(entityObj instanceof Integer) {
-			return Entity.asEntity(entityType.id.name, entityObj);
+			return Entity.entity(entityType.id.name, entityObj);
 			
 		} else {
 			Entity entity = (Entity)entityObj;

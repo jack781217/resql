@@ -206,6 +206,14 @@ public class DaoFactory {
 							} else if(field.relation == OneToOne || field.relation == ManyToOne) {
 								Entity childEntity = createOrUpdate(field.type.name, entity.get(field.name));
 								Object childId = childEntity.get(field.type.id.name);
+								
+								// TODO extract to do this in bulk
+								if(field.relation == OneToOne)
+									sql.updateSet(type.name, 
+											sqlFKName(field), sqlDataType(field.type.id), null, 
+											sqlFKName(field), sqlDataType(field.type.id), childId);
+								
+								
 								columns.add(sqlFKName(field));
 								columnTypes.add(sqlDataType(field.type.id));
 								columnValues.add(childId);
@@ -233,8 +241,12 @@ public class DaoFactory {
 								String table = sqlJoinTableName(type, field);
 								sql.deleteFrom(table, type.id.name, sqlDataType(type.id), id);
 								List<List<Object>> valuess = new ArrayList<>();
-								for(Entity child : children)
+								for(Entity child : children) {
+									//TODO change to bulk delete with the above delete
+									if(field.relation == OneToOne || field.relation == OneToMany)
+										sql.deleteFrom(table, sqlFKName(field), sqlDataType(field.type.id), child.get(field.type.id.name));
 									valuess.add(asList((Object)id, child.get(field.type.id.name)));
+								}
 								sql.insertInto(table, 
 										asList(type.id.name, sqlFKName(field)), 
 										asList(sqlDataType(type.id), sqlDataType(field.type.id)), 
@@ -258,6 +270,11 @@ public class DaoFactory {
 									"Invalid relation for sparse field %s: %s", field.name, field.relation);
 							
 							for(Entity child : children) {
+								if(field.relation == OneToOne)
+									sql.updateSet(field.type.name, 
+											sqlFKName(field.remote), sqlDataType(type.id), null, 
+											sqlFKName(field.remote), sqlDataType(type.id), id);
+									
 								sql.updateSet(field.type.name, 
 										sqlFKName(field.remote), sqlDataType(type.id), id, 
 										field.type.id.name, sqlDataType(field.type.id), child.get(field.type.id.name));
@@ -302,6 +319,8 @@ public class DaoFactory {
 
 		
 		public Entity read(String typeName, Object id, Map<String, Object> selectMap) throws SQLException {
+			if(id == null)
+				return null;
 			List<Entity> entities = read(typeName, asList(id), selectMap);
 			return entities.isEmpty() ? null : entities.get(0);
 		}
@@ -403,8 +422,7 @@ public class DaoFactory {
 								childId = mappingRows.get(0).get(0);
 							}
 						}
-
-						//log.info(field.name);
+						
 						
 						if(childId != null) {
 							Entity childEntity = read(field.type.name, asList(childId), 

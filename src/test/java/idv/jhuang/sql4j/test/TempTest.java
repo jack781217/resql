@@ -18,7 +18,7 @@ public class TempTest {
 	public void test() throws Exception {
 		
 		log.info(new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT).writeValueAsString(
-				Entity.asEntity("name", "a", "age", 10)));
+				Entity.entity("name", "a", "age", 10)));
 		
 		
 	}

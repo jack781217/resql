@@ -241,6 +241,8 @@ public class Sql {
 		
 		checkArgument(!columns.isEmpty(), "No columns to update.");
 		
+		//log.error("{} {}", values, idValue);
+		
 		String sql = String.format("UPDATE %s SET %s WHERE %s=?;",
 				table, 
 				String.join("=?, ", columns) + "=?",
@@ -258,6 +260,8 @@ public class Sql {
 		deleteFrom(table, Arrays.asList(column), Arrays.asList(type), Arrays.asList(values));
 	}
 	public void deleteFrom(String table, List<String> columns, List<String> types, List<Object> values) throws SQLException {
+		log.debug("columns: {}, values: {}", columns, values);
+		
 		String sql = String.format("DELETE FROM %s WHERE %s;", 
 				table, 
 				String.join("=? AND", columns) + "=?");
@@ -286,6 +290,7 @@ public class Sql {
 	}
 	
 	private void setParameter(PreparedStatement pstmt, int idx, Object value, String type) throws SQLException {
+		//log.debug("set {} to {}", idx, value);
 		if(type.startsWith("ENUM("))
 			type = "ENUM";
 		
@@ -329,22 +334,24 @@ public class Sql {
 		if(type.startsWith("ENUM("))
 			type = "ENUM";
 		
-		
+		Object value;
 		switch(type) {
 		case "INTEGER":
-			return (Integer) rs.getInt(idx);
+			value = (Integer) rs.getInt(idx); break;
 		case "ENUM":
 		case "VARCHAR(255)":
-			return (String) rs.getString(idx);
+			value = (String) rs.getString(idx); break;
 		case "DOUBLE":
-			return (Double) rs.getDouble(idx);
+			value = (Double) rs.getDouble(idx); break;
 		case "BOOLEAN":
-			return (Boolean) rs.getBoolean(idx);
+			value = (Boolean) rs.getBoolean(idx); break;
 		case "DATE":
-			return (Date) rs.getDate(idx);
+			value = (Date) rs.getDate(idx); break;
 		default:
 			throw new IllegalArgumentException("Unsuppoted SQL type: " + type + ".");
 		}
+		
+		return rs.wasNull() ? null : value;
 	}
 	
 	
